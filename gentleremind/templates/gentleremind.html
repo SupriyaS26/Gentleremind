@@ -1,1 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>GentleRemind</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #f2f9ff;
+      margin: 0;
+      padding: 0;
+      color: #333;
+    }
 
+    .container {
+      max-width: 700px;
+      margin: 50px auto;
+      padding: 30px;
+      background-color: #ffffff;
+      border-radius: 20px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+      text-align: center;
+    }
+
+    h1, h2 {
+      color: #2a79c2;
+    }
+
+    textarea {
+      width: 90%;
+      height: 100px;
+      margin: 20px 0;
+      padding: 15px;
+      border-radius: 10px;
+      border: 1px solid #ccc;
+      font-size: 16px;
+      resize: none;
+    }
+
+    #notification {
+      background-color: #e8f4ff;
+      border: 1px solid #b3d9ff;
+      padding: 15px;
+      border-radius: 10px;
+      margin-top: 20px;
+      font-size: 18px;
+      color: #1a4e8a;
+      transition: all 0.3s ease-in-out;
+    }
+
+    .feedback button,
+    #predictButton {
+      margin: 10px 10px 0 10px;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 8px;
+      background-color: #2a79c2;
+      color: white;
+      font-size: 16px;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+
+    .feedback button:hover,
+    #predictButton:hover {
+      background-color: #155b9b;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>GentleRemind</h1>
+    <p>Start typing below and let the AI nudge you into better habits!</p>
+
+    <textarea id="userInput" placeholder="Start typing..."></textarea>
+
+    <div id="notification"></div>
+
+    <div class="feedback">
+      <button onclick="logFeedback('helped')">Helped</button>
+      <button onclick="logFeedback('not_helped')">Didn't Help</button>
+    </div>
+
+    <h1>Nudge Prediction</h1>
+    <button id="predictButton" onclick="getNudgePrediction()">Get Nudge Prediction</button>
+  </div>
+
+  <script>
+  let lastActivityTime = Date.now();
+const IDLE_LIMIT = 5000;
+const MESSAGE_COOLDOWN = 10000;
+const userInput = document.getElementById("userInput");
+const notifBox = document.getElementById("notification");
+
+const COHERE_API_KEY = "wtrHMtEQ9a75bHbbck077amQec2u65TB46IvLCtf";
+
+const habitThemes = ["hydration", "stretching", "eye relaxation", "posture correction", "calm breathing", "standing break"];
+let themeIndex = 0;
+let isMessageVisible = false;
+let stopNudging = false;
+
+userInput.addEventListener("input", () => {
+  lastActivityTime = Date.now();
+  hideNotification();
+  document.body.style.filter = "none";
+});
+
+function glitchEffect() {
+  document.body.style.filter = "invert(100%)";
+  setTimeout(() => document.body.style.filter = "none", 500);
+}
+
+function showNotification(msg) {
+  notifBox.innerText = msg;
+  notifBox.style.display = "block";
+}
+
+function hideNotification() {
+  notifBox.innerText = "";
+  notifBox.style.display = "none";
+}
+
+async function generateNudge(tone = "neutral") {
+  const theme = habitThemes[themeIndex % habitThemes.length];
+  themeIndex++;
+
+  const prompt = `You are a friendly assistant who helps people build good habits.
+Suggest a VERY SIMPLE, SHORT sentence to remind someone to take care of their health.
+Use only easy words a 10-year-old can understand.
+Topic: "${theme}"`;
+
+  try {
+    const response = await fetch("https://api.cohere.ai/v1/generate", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${COHERE_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "command",
+        prompt: prompt,
+        max_tokens: 60,
+        temperature: 1,
+        k: 0,
+        p: 0.75,
+        frequency_penalty: 0.4,
+        presence_penalty: 0,
+        stop_sequences: []
+      })
+    });
+
+    const data = await response.json();
+    return data.generations?.[0]?.text?.trim() || "Couldn't think of a clever nudge!";
+  } catch (err) {
+    console.error("Cohere error:", err);
+    return "AI is taking a nap. Try again later!";
+  }
+}
+
+setInterval(async () => {
+  const now = Date.now();
+  const idleTime = now - lastActivityTime;
+
+  if (idleTime >= IDLE_LIMIT && !isMessageVisible && !stopNudging) {
+    isMessageVisible = true;
+    const nudge = await generateNudge("neutral");
+    glitchEffect();
+    showNotification(nudge);
+
+    setTimeout(() => {
+      if (!stopNudging) isMessageVisible = false;
+    }, MESSAGE_COOLDOWN);
+
+    lastActivityTime = Date.now();
+  }
+}, 1000);
+
+async function anotherNudge() {
+  const newNudge = await generateNudge("neutral");
+  showNotification(newNudge);
+
+  setTimeout(() => {
+    hideNotification();
+    isMessageVisible = false;
+  }, MESSAGE_COOLDOWN);
+}
+
+function stopNudges() {
+  stopNudging = true;
+  showNotification("Alright! No more nudges for now.");
+  setTimeout(hideNotification, 5000);
+}
+
+function logFeedback(result) {
+  console.log(`User feedback: ${result}`);
+  hideNotification();
+}
+    async function getNudgePrediction() {
+      const userText = document.getElementById("userInput").value;
+      
+      const response = await fetch('/nudges/predict/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ text: userText })
+      });
+
+      const data = await response.json();
+      document.getElementById("notification").innerText = data.nudge;
+    }
+  </script>
+</body>
+</html>
